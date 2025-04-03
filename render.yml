@@ -1,13 +1,13 @@
 services:
   - type: web
-    name: vhu-test-bot
+    name: chat-bot-temporarily
     env: node
     plan: free
     buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: TELEGRAM_BOT_TOKEN
-        value: 7700926542:AAEkxhSjdG8wgOGiJHfBDGOJgzKLJjj3yCA
+        value: 7700926542:AAEkxhSjdG8wgOGiJHfBDGOJgzKLJjj3yCA  # Token mới của bot tạm
       - key: VHU_EMAIL
         value: 221A010032
       - key: VHU_PASSWORD
@@ -16,6 +16,6 @@ services:
         value: 10000
       - key: CHROME_PATH
         value: /usr/bin/google-chrome-stable
-    healthCheckPath: /run-bot
+    healthCheckPath: /
     autoDeploy: true
     port: 10000

@@ -1,4 +1,5 @@
 require("dotenv").config();
+const TelegramBot = require("node-telegram-bot-api");
 const express = require("express");
 const puppeteer = require("puppeteer-core");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
@@ -6,14 +7,14 @@ const puppeteerExtra = require("puppeteer-extra");
 
 puppeteerExtra.use(StealthPlugin());
 
+const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const bot = new TelegramBot(TOKEN, { polling: true });
 const app = express();
 app.use(express.json());
 const PORT = process.env.PORT || 10000;
 
-// Hàm tiện ích để tạo độ trễ
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Hàm khởi tạo trình duyệt Puppeteer
 async function launchBrowser() {
   try {
     const browser = await puppeteerExtra.launch({
@@ -40,7 +41,6 @@ async function launchBrowser() {
   }
 }
 
-// Hàm đăng nhập vào portal
 async function login(page, username, password, retries = 5) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
@@ -61,6 +61,10 @@ async function login(page, username, password, retries = 5) {
       await page.waitForSelector("input[name='password']", { timeout: 120000 });
       await page.type("input[name='password']", password, { delay: 100 });
       console.log("✍️ Đã nhập thông tin đăng nhập.");
+
+      await page.setUserAgent(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+      );
 
       await page.waitForSelector("button[type='submit']", { timeout: 120000 });
       await page.click("button[type='submit']");
@@ -91,8 +95,7 @@ async function login(page, username, password, retries = 5) {
   }
 }
 
-// Hàm lấy lịch học
-async function getSchedule() {
+async function getSchedule(chatId) {
   const browser = await launchBrowser();
   const page = await browser.newPage();
   try {
@@ -148,36 +151,154 @@ async function getSchedule() {
       return { schedule, week: "này của bạn" };
     });
 
-    console.log("✅ Đã lấy lịch học:", JSON.stringify(scheduleData));
-    return scheduleData;
+    console.log("✅ Đã lấy lịch học.");
+    let message = `📅 **Lịch học tuần ${scheduleData.week}**\n------------------------------------\n`;
+    let hasSchedule = false;
+
+    for (const [ngay, monHocs] of Object.entries(scheduleData.schedule)) {
+      message += `📌 **${ngay}:**\n`;
+      if (monHocs.length) {
+        hasSchedule = true;
+        monHocs.forEach((m) => {
+          message += `📖 **${m.subject} – ${m.classCode}**\n` +
+                     `     (Tiết ${m.periods}, Giờ bắt đầu: ${m.startTime} – Phòng học: ${m.room}, GV: ${m.professor}, Email: ${m.email})\n`;
+        });
+      } else {
+        message += "❌ Không có lịch\n";
+      }
+      message += "\n";
+    }
+
+    if (!hasSchedule) {
+      message = `📅 **Lịch học tuần ${scheduleData.week}**\n------------------------------------\n❌ Không có lịch học trong tuần này.`;
+    }
+
+    await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
   } catch (error) {
     console.error("❌ Lỗi trong getSchedule:", error.message);
-    throw error;
+    await bot.sendMessage(chatId, `❌ Lỗi lấy lịch học: ${error.message}`);
   } finally {
     await browser.close();
   }
 }
 
-// Endpoint để cron-job.org gọi
-app.get("/run-bot", async (req, res) => {
-  console.log("🤖 Bot được gọi từ cron-job.org hoặc Render!");
+async function getNotifications(chatId) {
+  const browser = await launchBrowser();
+  const page = await browser.newPage();
   try {
-    const lichHoc = await getSchedule();
-    console.log("✅ Đã lấy lịch học thành công!");
-    res.status(200).json(lichHoc); // Trả kết quả dưới dạng JSON
+    await login(page, process.env.VHU_EMAIL, process.env.VHU_PASSWORD);
+    await page.goto("https://portal.vhu.edu.vn/student/index", { waitUntil: "networkidle0", timeout: 120000 });
+    await page.waitForSelector(".MuiTableBody-root", { timeout: 120000 });
+    const notifications = await page.evaluate(() => {
+      const rows = document.querySelectorAll(".MuiTableBody-root tr");
+      return Array.from(rows).map((row) => {
+        const cols = row.querySelectorAll("td");
+        return {
+          MessageSubject: cols[0]?.querySelector("a")?.textContent.trim() || "Không rõ",
+          SenderName: cols[1]?.textContent.trim() || "Không rõ",
+          CreationDate: cols[2]?.textContent.trim() || "Không rõ",
+        };
+      });
+    });
+
+    let message = "📢 **Thông báo mới nhất**\n------------------------------------\n";
+    if (notifications.length) {
+      notifications.forEach((n) => {
+        message += `📌 **${n.MessageSubject}**\n` +
+                   `     (Người gửi: ${n.SenderName}, Ngày: ${n.CreationDate})\n\n`;
+      });
+    } else {
+      message += "❌ Không có thông báo nào.\n";
+    }
+    await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
   } catch (error) {
-    console.error("❌ Lỗi khi chạy bot:", error.message);
-    res.status(500).json({ error: error.message });
+    console.error("❌ Lỗi trong getNotifications:", error.message);
+    await bot.sendMessage(chatId, `❌ Lỗi lấy thông báo: ${error.message}`);
+  } finally {
+    await browser.close();
   }
+}
+
+async function getSocialWork(chatId) {
+  const browser = await launchBrowser();
+  const page = await browser.newPage();
+  try {
+    await login(page, process.env.VHU_EMAIL, process.env.VHU_PASSWORD);
+    await page.goto("https://portal.vhu.edu.vn/student/congtacxahoi", { waitUntil: "networkidle0", timeout: 120000 });
+    await page.waitForSelector(".MuiTableBody-root", { timeout: 120000 });
+    const socialWork = await page.evaluate(() => {
+      const rows = document.querySelectorAll(".MuiTableBody-root tr");
+      return Array.from(rows).map((row) => {
+        const cols = row.querySelectorAll("td");
+        return {
+          Index: cols[0]?.textContent.trim() || "Không rõ",
+          Event: cols[1]?.textContent.trim() || "Không rõ",
+          Location: cols[2]?.textContent.trim() || "Không rõ",
+          NumRegistered: cols[3]?.textContent.trim() || "Không rõ",
+          Points: cols[4]?.textContent.trim() || "0",
+          StartTime: cols[5]?.textContent.trim() || "Không rõ",
+          EndTime: cols[6]?.textContent.trim() || "Không rõ",
+        };
+      });
+    });
+
+    let message = "🤝 **Công tác xã hội**\n------------------------------------\n";
+    if (socialWork.length) {
+      socialWork.forEach((s) => {
+        message += `📌 **${s.Event}**\n` +
+                   `     (Địa điểm: ${s.Location}, Đã đăng ký: ${s.NumRegistered}, Điểm: ${s.Points})\n` +
+                   `     (Bắt đầu: ${s.StartTime}, Kết thúc: ${s.EndTime})\n\n`;
+      });
+    } else {
+      message += "❌ Không có công tác xã hội nào.\n";
+    }
+    await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+  } catch (error) {
+    console.error("❌ Lỗi trong getSocialWork:", error.message);
+    await bot.sendMessage(chatId, `❌ Lỗi lấy công tác xã hội: ${error.message}`);
+  } finally {
+    await browser.close();
+  }
+}
+
+bot.onText(/\/start/, (msg) => {
+  const chatId = msg.chat.id;
+  bot.sendMessage(
+    chatId,
+    "👋 Xin chào! Mình là Bot hỗ trợ sinh viên VHU.\n" +
+      "📅 /tuannay - Lịch học tuần này.\n" +
+      "📢 /thongbao - Thông báo mới nhất.\n" +
+      "🤝 /congtac - Công tác xã hội."
+  );
 });
 
-// Endpoint kiểm tra server
-app.get("/", (req, res) => {
-  console.log("✅ Server được ping!");
-  res.status(200).send("Server is alive!");
+bot.onText(/\/tuannay/, (msg) => {
+  const chatId = msg.chat.id;
+  bot.sendMessage(chatId, "⏳ Đang lấy lịch học tuần này...");
+  getSchedule(chatId);
 });
 
-// Khởi động server
+bot.onText(/\/thongbao/, (msg) => {
+  const chatId = msg.chat.id;
+  bot.sendMessage(chatId, "⏳ Đang lấy thông báo...");
+  getNotifications(chatId);
+});
+
+bot.onText(/\/congtac/, (msg) => {
+  const chatId = msg.chat.id;
+  bot.sendMessage(chatId, "⏳ Đang lấy danh sách công tác xã hội...");
+  getSocialWork(chatId);
+});
+
+bot.on("polling_error", (error) => {
+  console.error("❌ Polling error:", error.message);
+});
+
+app.get("/", (req, res) => res.send("Bot is running"));
+
 app.listen(PORT, () => {
   console.log(`Server chạy trên port ${PORT}`);
 });
+
+console.log("🤖 Bot Telegram đang khởi động...");
+console.log("✅ Bot đang chạy ở chế độ polling...");

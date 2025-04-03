@@ -1,18 +1,19 @@
 {
-    "name": "vhu-test-bot",
+    "name": "vhu-telegram-bot",
     "version": "1.0.0",
-    "description": "Test bot for VHU",
+    "description": "Telegram bot for VHU student portal",
     "main": "bot.js",
     "scripts": {
       "start": "node bot.js"
     },
     "dependencies": {
-      "dotenv": "^16.0.0",
-      "express": "^4.17.1",
-      "puppeteer-core": "^22.0.0",
+      "dotenv": "^16.4.5",
+      "express": "^4.19.2",
+      "node-telegram-bot-api": "^0.66.0",
+      "puppeteer-core": "^22.6.5",
       "puppeteer-extra": "^3.3.6",
       "puppeteer-extra-plugin-stealth": "^2.11.2"
     },
-    "author": "Cuong VO",
+    "author": "Your Name",
     "license": "ISC"
   }
