@@ -161,10 +161,20 @@ async function getSchedule() {
   }
 }
 
+// Endpoint để lấy Chat ID
+app.get("/get-chat-id", (req, res) => {
+  bot.on("message", (msg) => {
+    const chatId = msg.chat.id;
+    console.log("Chat ID:", chatId);
+    bot.sendMessage(chatId, `Chat ID của bạn: ${chatId}`);
+    res.status(200).send(`Chat ID: ${chatId}`);
+  });
+});
+
 // Endpoint để cron-job.org gọi
 app.get("/run-bot", async (req, res) => {
   console.log("🤖 Bot được gọi từ cron-job.org hoặc Render!");
-  const chatId = "YOUR_CHAT_ID"; // Thay bằng chat ID của cậu
+  const chatId = "YOUR_CHAT_ID"; // Sau khi lấy được, thay vào đây
 
   if (!chatId || chatId === "YOUR_CHAT_ID") {
     console.error("❌ Chat ID chưa được cấu hình!");
