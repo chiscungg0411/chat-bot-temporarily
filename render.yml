@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: vhu-test-bot
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        value: 7700926542:AAEkxhSjdG8wgOGiJHfBDGOJgzKLJjj3yCA
+      - key: VHU_EMAIL
+        value: 221A010032
+      - key: VHU_PASSWORD
+        value: 0411Vcc.
+      - key: PORT
+        value: 10000
+      - key: CHROME_PATH
+        value: /usr/bin/google-chrome-stable
+    healthCheckPath: /run-bot
+    autoDeploy: true
+    port: 10000
