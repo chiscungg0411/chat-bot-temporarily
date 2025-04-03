@@ -65,10 +65,6 @@ async function login(page, username, password, retries = 5) {
       await page.type("input[name='password']", password, { delay: 100 });
       console.log("✍️ Đã nhập thông tin đăng nhập.");
 
-      await page.setUserAgent(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-      );
-
       await page.waitForSelector("button[type='submit']", { timeout: 120000 });
       await page.click("button[type='submit']");
       console.log("⏳ Đang chờ phản hồi sau đăng nhập...");
@@ -155,7 +151,7 @@ async function getSchedule() {
       return { schedule, week: "này của bạn" };
     });
 
-    console.log("✅ Đã lấy lịch học.");
+    console.log("✅ Đã lấy lịch học:", JSON.stringify(scheduleData));
     return scheduleData;
   } catch (error) {
     console.error("❌ Lỗi trong getSchedule:", error.message);
@@ -165,70 +161,15 @@ async function getSchedule() {
   }
 }
 
-// Hàm lấy thông báo
-async function getNotifications() {
-  const browser = await launchBrowser();
-  const page = await browser.newPage();
-  try {
-    await login(page, process.env.VHU_EMAIL, process.env.VHU_PASSWORD);
-    await page.goto("https://portal.vhu.edu.vn/student/index", { waitUntil: "networkidle0", timeout: 120000 });
-    await page.waitForSelector(".MuiTableBody-root", { timeout: 120000 });
-    const notifications = await page.evaluate(() => {
-      const rows = document.querySelectorAll(".MuiTableBody-root tr");
-      return Array.from(rows).map((row) => {
-        const cols = row.querySelectorAll("td");
-        return {
-          MessageSubject: cols[0]?.querySelector("a")?.textContent.trim() || "Không rõ",
-          SenderName: cols[1]?.textContent.trim() || "Không rõ",
-          CreationDate: cols[2]?.textContent.trim() || "Không rõ",
-        };
-      });
-    });
-    return notifications;
-  } catch (error) {
-    console.error("❌ Lỗi trong getNotifications:", error.message);
-    throw error;
-  } finally {
-    await browser.close();
-  }
-}
-
-// Hàm lấy công tác xã hội
-async function getSocialWork() {
-  const browser = await launchBrowser();
-  const page = await browser.newPage();
-  try {
-    await login(page, process.env.VHU_EMAIL, process.env.VHU_PASSWORD);
-    await page.goto("https://portal.vhu.edu.vn/student/congtacxahoi", { waitUntil: "networkidle0", timeout: 120000 });
-    await page.waitForSelector(".MuiTableBody-root", { timeout: 120000 });
-    const socialWork = await page.evaluate(() => {
-      const rows = document.querySelectorAll(".MuiTableBody-root tr");
-      return Array.from(rows).map((row) => {
-        const cols = row.querySelectorAll("td");
-        return {
-          Index: cols[0]?.textContent.trim() || "Không rõ",
-          Event: cols[1]?.textContent.trim() || "Không rõ",
-          Location: cols[2]?.textContent.trim() || "Không rõ",
-          NumRegistered: cols[3]?.textContent.trim() || "Không rõ",
-          Points: cols[4]?.textContent.trim() || "0",
-          StartTime: cols[5]?.textContent.trim() || "Không rõ",
-          EndTime: cols[6]?.textContent.trim() || "Không rõ",
-        };
-      });
-    });
-    return socialWork;
-  } catch (error) {
-    console.error("❌ Lỗi trong getSocialWork:", error.message);
-    throw error;
-  } finally {
-    await browser.close();
-  }
-}
-
 // Endpoint để cron-job.org gọi
 app.get("/run-bot", async (req, res) => {
-  console.log("🤖 Bot được gọi từ cron-job.org!");
+  console.log("🤖 Bot được gọi từ cron-job.org hoặc Render!");
   const chatId = "YOUR_CHAT_ID"; // Thay bằng chat ID của cậu
+
+  if (!chatId || chatId === "YOUR_CHAT_ID") {
+    console.error("❌ Chat ID chưa được cấu hình!");
+    return res.status(500).send("Chat ID chưa được cấu hình!");
+  }
 
   try {
     const lichHoc = await getSchedule();
@@ -254,11 +195,19 @@ app.get("/run-bot", async (req, res) => {
     }
 
     await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+    console.log("✅ Đã gửi lịch học đến Telegram!");
     res.status(200).send("Bot chạy thành công!");
   } catch (error) {
+    console.error("❌ Lỗi khi chạy bot:", error.message);
     await bot.sendMessage(chatId, `❌ Lỗi lấy lịch học: ${error.message}`);
     res.status(500).send("Lỗi khi chạy bot!");
   }
+});
+
+// Endpoint kiểm tra server
+app.get("/", (req, res) => {
+  console.log("✅ Server được ping!");
+  res.status(200).send("Server is alive!");
 });
 
 // Khởi động server
