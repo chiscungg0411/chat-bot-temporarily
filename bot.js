@@ -1,5 +1,4 @@
 require("dotenv").config();
-const TelegramBot = require("node-telegram-bot-api");
 const express = require("express");
 const puppeteer = require("puppeteer-core");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
@@ -7,8 +6,6 @@ const puppeteerExtra = require("puppeteer-extra");
 
 puppeteerExtra.use(StealthPlugin());
 
-const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const bot = new TelegramBot(TOKEN);
 const app = express();
 app.use(express.json());
 const PORT = process.env.PORT || 10000;
@@ -161,56 +158,16 @@ async function getSchedule() {
   }
 }
 
-// Endpoint để lấy Chat ID
-app.get("/get-chat-id", (req, res) => {
-  bot.on("message", (msg) => {
-    const chatId = msg.chat.id;
-    console.log("Chat ID:", chatId);
-    bot.sendMessage(chatId, `Chat ID của bạn: ${chatId}`);
-    res.status(200).send(`Chat ID: ${chatId}`);
-  });
-});
-
 // Endpoint để cron-job.org gọi
 app.get("/run-bot", async (req, res) => {
   console.log("🤖 Bot được gọi từ cron-job.org hoặc Render!");
-  const chatId = "YOUR_CHAT_ID"; // Sau khi lấy được, thay vào đây
-
-  if (!chatId || chatId === "YOUR_CHAT_ID") {
-    console.error("❌ Chat ID chưa được cấu hình!");
-    return res.status(500).send("Chat ID chưa được cấu hình!");
-  }
-
   try {
     const lichHoc = await getSchedule();
-    let message = `📅 **Lịch học tuần ${lichHoc.week}**\n------------------------------------\n`;
-    let hasSchedule = false;
-
-    for (const [ngay, monHocs] of Object.entries(lichHoc.schedule)) {
-      message += `📌 **${ngay}:**\n`;
-      if (monHocs.length) {
-        hasSchedule = true;
-        monHocs.forEach((m) => {
-          message += `📖 **${m.subject} – ${m.classCode}**\n` +
-                     `     (Tiết ${m.periods}, Giờ bắt đầu: ${m.startTime} – Phòng học: ${m.room}, GV: ${m.professor}, Email: ${m.email})\n`;
-        });
-      } else {
-        message += "❌ Không có lịch\n";
-      }
-      message += "\n";
-    }
-
-    if (!hasSchedule) {
-      message = `📅 **Lịch học tuần ${lichHoc.week}**\n------------------------------------\n❌ Không có lịch học trong tuần này.`;
-    }
-
-    await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
-    console.log("✅ Đã gửi lịch học đến Telegram!");
-    res.status(200).send("Bot chạy thành công!");
+    console.log("✅ Đã lấy lịch học thành công!");
+    res.status(200).json(lichHoc); // Trả kết quả dưới dạng JSON
   } catch (error) {
     console.error("❌ Lỗi khi chạy bot:", error.message);
-    await bot.sendMessage(chatId, `❌ Lỗi lấy lịch học: ${error.message}`);
-    res.status(500).send("Lỗi khi chạy bot!");
+    res.status(500).json({ error: error.message });
   }
 });
 
